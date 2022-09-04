@@ -1,0 +1,40 @@
+---
+name: pilotctl
+description: control pilot agents managing remote devices
+port: "8888"
+var:
+  - name: PILOT_CTL_DB_HOST
+    description: the name of the database service host used by pilot control to store management data
+  - name: PILOT_CTL_DB_USER
+    description: the username to authenticate with the database service
+  - name: PILOT_CTL_DB_PWD
+    description: the password to authenticate with the database service
+    secret: true
+  - name: HTTP_PORT
+    description: the port on which pilot control http server is listening
+    value: "8888"
+  - name: PILOT_CTL_ILINK_URI
+    description: the URI of the Onix Web API service used by pilot control to store configuration data
+  - name: PILOT_CTL_ILINK_USER
+    description: the username to authenticate with the Onix Web API service
+  - name: PILOT_CTL_ILINK_PWD
+    description: the password to authenticate with the Onix Web API service
+    secret: true
+  - name: PILOT_CTL_ILINK_INSECURE_SKIP_VERIFY
+    description: skips verification of TLS certificate for the Onix Web API service
+    default: "false"
+  - name: PILOT_CTL_ART_REG_URI
+    description: the URI of the Artisan registry service used by pilot control to look up automation packages
+  - name: PILOT_CTL_ART_REG_USER
+    description: the username to authenticate with the Artisan Registry service
+  - name: PILOT_CTL_ART_REG_PWD
+    description: the password to authenticate with the Artisan Registry service
+    secret: true
+file:
+  - value: /keys/.pilot_verify.pgp
+    description: the public pgp key used by pilot to verify connections to pilot control
+    secret: true
+  - value: /keys/.pilot_sign.pgp
+    description: the private pgp key used by pilot to sign commands issued to pilot instances
+    secret: true
+...
