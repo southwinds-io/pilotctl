@@ -1,4 +1,4 @@
-<img src="https://github.com/southwinds-io/pilotctl/raw/main/pilot.png" width="100" align="right"/>
+<img src="https://github.com/southwinds-io/pilotctl/raw/main/pilot.png" width="300" align="right"/>
 
 # Pilot Control Service 
 
