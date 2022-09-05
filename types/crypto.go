@@ -366,36 +366,6 @@ func (p *PGP) Decrypt(encrypted []byte) ([]byte, error) {
 	return out, nil
 }
 
-// func (p *PGP) toPrivateKey(version string) (privateKey []byte, err error) {
-//     // the buffer to contain the serialised key pair
-//     privateBuf := new(bytes.Buffer)
-//     // serialises the private key into the buffer
-//     p.entity.SerializePrivate(privateBuf, p.conf)
-//     // create PEM headers for the PGP key
-//     headers := pemHeaders(version, cipherToString(p.conf.DefaultCipher), p.conf.DefaultHash.String(), p.conf.RSABits, p.conf.Time())
-//     // encode the buffer containing the serialised private key into Armor ASCII format
-//     privateKey, err = armorEncode(privateBuf, openpgp.PrivateKeyType, headers)
-//     if err != nil {
-//         return nil, fmt.Errorf("cannot armor encode private key: %s", err)
-//     }
-//     return privateKey, nil
-// }
-//
-// func (p *PGP) toPublicKey(version string) (publicKey []byte, err error) {
-//     // the buffer to contain the serialised public key
-//     publicBuf := new(bytes.Buffer)
-//     // serialises the public key into the buffer
-//     p.entity.Serialize(publicBuf)
-//     // create PEM headers for the PGP key
-//     headers := pemHeaders(version, cipherToString(p.conf.DefaultCipher), p.conf.DefaultHash.String(), p.conf.RSABits, p.conf.Time())
-//     // encode the buffer containing the serialised public key into Armor ASCII format
-//     publicKey, err = armorEncode(publicBuf, openpgp.PublicKeyType, headers)
-//     if err != nil {
-//         return nil, fmt.Errorf("cannot armor encode public key: %s", err)
-//     }
-//     return publicKey, nil
-// }
-
 // create PEM headers for the PGP key
 func pemHeaders(version, cipher, hash string, rsaBits int, time time.Time) map[string]string {
 	headers := map[string]string{
