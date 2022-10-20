@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -115,7 +114,7 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func cveReportExportHandler(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("cannot read CVE export payload: %s\n", err)
 		http.Error(w, "cannot read CVE export payload, check the server logs\n", http.StatusBadRequest)
@@ -232,7 +231,7 @@ func hostDecommissionHandler(w http.ResponseWriter, r *http.Request) {
 // registerHandler excluded from swagger as it is accessed by pilot with a special time-bound access token
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	// get http body
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
 		http.Error(w, "can't read body, check the server logs for more details", http.StatusBadRequest)
@@ -273,7 +272,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {string} there was an error in the server, check the server logs
 // @Success 200 {string} OK
 func updateCmdHandler(w http.ResponseWriter, r *http.Request) {
-	bytes, err := ioutil.ReadAll(r.Body)
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("failed to read request body: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -365,7 +364,7 @@ func getAllCmdHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {string} there was an error in the server, check the server logs
 // @Success 200 {string} OK
 func newJobHandler(w http.ResponseWriter, r *http.Request) {
-	bytes, err := ioutil.ReadAll(r.Body)
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("can't read http body: %v\n", err)
 		http.Error(w, fmt.Sprintf("can't read http body: check server logs\n"), http.StatusInternalServerError)
@@ -626,7 +625,7 @@ func syncInfoHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {string} there was an error in the server, check the server logs
 // @Success 200 {string} OK
 func setAdmissionHandler(w http.ResponseWriter, r *http.Request) {
-	bytes, err := ioutil.ReadAll(r.Body)
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -746,7 +745,7 @@ func getKeyHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {string} there was an error in the server, check the server logs
 // @Success 201 {string} OK
 func registrationHandler(w http.ResponseWriter, r *http.Request) {
-	bytes, err := ioutil.ReadAll(r.Body)
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("cannot read payload: %s\n", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -839,7 +838,7 @@ func getDictionaryHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {string} there was an error in the server, check the server logs
 // @Success 200 {string} OK
 func setDictionaryHandler(w http.ResponseWriter, r *http.Request) {
-	bytes, err := ioutil.ReadAll(r.Body)
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("failed to read request body: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
