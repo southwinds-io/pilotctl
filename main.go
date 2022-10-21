@@ -11,8 +11,10 @@ package main
 import (
 	"github.com/gorilla/mux"
 	"net/http"
+	"os"
 	h "southwinds.dev/http"
 	"southwinds.dev/pilotctl/core"
+	"southwinds.dev/pilotctl/telem"
 )
 
 func main() {
@@ -81,6 +83,15 @@ func main() {
 		"^/$":                nil,
 	}
 	s.DefaultAuth = defaultAuth
+	s.Jobs = func() error {
+		enableTelemetry := os.Getenv("PILOTCTL_ENABLE_TELEMETRY")
+		if len(enableTelemetry) > 0 {
+			// launches the OT gateway
+			gateway := telem.NewOtServer(0)
+			go gateway.Start()
+		}
+		return nil
+	}
 	s.Serve()
 }
 

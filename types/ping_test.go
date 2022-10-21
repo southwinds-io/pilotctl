@@ -57,7 +57,7 @@ func verify(obj interface{}, signature string, pubKey []byte) error {
 		return fmt.Errorf("verify => cannot calculate checksum: %s\n", err)
 	}
 	// load verification key from activation key
-	pgp, err := LoadPGPBytes([]byte(pubKey))
+	pgp, err := LoadPGPBytes(pubKey)
 	if err != nil {
 		return fmt.Errorf("verify => cannot load host verification key: %s", err)
 	}
