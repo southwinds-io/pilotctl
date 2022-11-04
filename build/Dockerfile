@@ -18,8 +18,7 @@ ENV GID=100
 
 ENV SYNC_PATH=/sync
 
-RUN microdnf update --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos -y && \
-    microdnf install shadow-utils.x86_64 && \
+RUN microdnf install shadow-utils.x86_64 && \
     groupadd -g $GID -o $UNAME && \
     useradd -M -u $UID -g $GID $UNAME && \
     rm -rf /var/cache/yum && \
@@ -31,7 +30,7 @@ USER $UNAME
 
 WORKDIR /app
 
-COPY ./bin/pilotctl ./svc.yaml ./
+COPY pilotctl mongo-metrics pravega-metrics svc.yaml ./
 
 # mount for PGP signing key
 VOLUME /keys

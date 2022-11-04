@@ -49,7 +49,6 @@ type PingResponseEnvelope struct {
 
 type PingRequest struct {
 	Result *JobResult `json:"result,omitempty"`
-	Events *Events    `json:"events,omitempty"`
 }
 
 func (r *PingRequest) Reader() (*bytes.Reader, error) {

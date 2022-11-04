@@ -13,8 +13,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"regexp"
 	"southwinds.dev/artisan/core"
 	"southwinds.dev/artisan/data"
 	"southwinds.dev/artisan/registry"
@@ -35,8 +40,6 @@ type API struct {
 	hostUUID string
 	hostname string
 	hostIP   string
-	// event publisher
-	pub *EventPublisher
 }
 
 func NewAPI(cfg *Conf) (*API, error) {
@@ -59,16 +62,11 @@ func NewAPI(cfg *Conf) (*API, error) {
 		db:    db,
 		conf:  cfg,
 		iLink: il,
-		pub:   NewEventPublisher(),
 	}, nil
 }
 
 func (r *API) PingInterval() time.Duration {
 	return r.conf.PingIntervalSecs()
-}
-
-func (r *API) PublishEvents(events *Events) {
-	r.pub.Publish(events)
 }
 
 func (r *API) Register(reg *RegistrationRequest) (*RegistrationResponse, error) {
@@ -976,6 +974,123 @@ func (r *API) GetCVEBaseline(score float64, label []string) ([]CvePackage, error
 	return list, nil
 }
 
+// SubmitMetrics post the metrics to a backend using a connector
+func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
+	var (
+		pbUnmarshall = pmetric.ProtoUnmarshaler{}
+		jsonMarshal  = pmetric.JSONMarshaler{}
+		conn         string
+		ok           bool
+	)
+	// find the connector to use based on the specified channel
+	if conn, ok = connectorName(channel); !ok {
+		return ConnResult{
+			Error:             fmt.Sprintf("telemetry connector not defined, skipping telemetry recording"),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// unmarshall the protobuf content
+	metrics, err := pbUnmarshall.UnmarshalMetrics(content)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("cannot unmarshal protobuf metrics, corrupted or invalid format: %s", err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// converts content to json
+	data, err := jsonMarshal.MarshalMetrics(metrics)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("cannot marshal request to json: %s", err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// base 64 encode the json content
+	b64Data := base64.StdEncoding.EncodeToString(data)
+	// execute the connector passing in the json content
+	dir, _ := os.Getwd()
+	c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
+	c.Env = os.Environ()
+	outBytes, err := c.Output()
+	// extracts the response for the stdout
+	out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
+	if len(out) == 0 {
+		return ConnResult{
+			Error:             fmt.Sprintf("connector %s gave an empty response, execution failed: %s", conn, err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	result := new(ConnResult)
+	err = json.Unmarshal([]byte(out), result)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	return *result
+}
+
+// SubmitLogs post the logs to a backend using a connector
+func (r *API) SubmitLogs(channel string, content []byte) ConnResult {
+	var (
+		pbUnmarshall = plog.ProtoUnmarshaler{}
+		jsonMarshal  = plog.JSONMarshaler{}
+		conn         string
+		ok           bool
+	)
+	// find the connector to use based on the specified channel
+	if conn, ok = connectorName(channel); !ok {
+		return ConnResult{
+			Error:             fmt.Sprintf("telemetry connector not defined, skipping telemetry recording"),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// unmarshall the protobuf content
+	metrics, err := pbUnmarshall.UnmarshalLogs(content)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("cannot unmarshal logs: %s", err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// converts content to json
+	data, err := jsonMarshal.MarshalLogs(metrics)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("cannot marshal request to json: %s", err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	// base 64 encode the json content
+	b64Data := base64.StdEncoding.EncodeToString(data)
+	// execute the connector passing in the json content
+	dir, _ := os.Getwd()
+	c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
+	c.Env = os.Environ()
+	outBytes, err := c.Output()
+	// extracts the response for the stdout
+	out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
+	result := new(ConnResult)
+	err = json.Unmarshal([]byte(out), result)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	return *result
+}
+
 func reverse(str string) (result string) {
 	for _, v := range str {
 		result = string(v) + result
@@ -1024,4 +1139,28 @@ func fromInterfaceSlice(tags []interface{}) []string {
 		result[i] = fmt.Sprint(tag)
 	}
 	return result
+}
+
+// the name of the connector to use based on the specified channel
+func connectorName(channel string) (string, bool) {
+	// the value of the env is of the format channel:connector,... (e.g. ch1:mongodb_conn,ch2:pravega_conn)
+	n := os.Getenv("PILOT_CTL_TELEM_CONN")
+	if len(n) == 0 {
+		return "", false
+	}
+	parts := strings.Split(n, ",")
+	for _, part := range parts {
+		subParts := strings.Split(part, ":")
+		if strings.EqualFold(subParts[0], channel) {
+			return subParts[1], true
+		}
+	}
+	return "", false
+}
+
+// ConnResult the result of the connector execution
+type ConnResult struct {
+	Error             string `json:"e,omitempty"`
+	TotalEntries      int    `json:"t,omitempty"`
+	SuccessfulEntries int    `json:"s,omitempty"`
 }

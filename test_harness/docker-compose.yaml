@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  interlink:
+    image: "${IMG_INTERLINK}"
+    depends_on:
+      - db
+    container_name: ilink
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_USER=${INTERLINK_DB_USER}
+      - DB_PWD=${INTERLINK_DB_PWD}
+      - DB_ADMIN_USER=${INTERLINK_DB_ADMIN_USER}
+      - DB_ADMIN_PWD=${INTERLINK_DB_ADMIN_PWD}
+      - INTERLINK_EVENTS_ENABLED=false
+    ports:
+      - "8080:8080"
+
+  db:
+    image: ${IMG_DB}
+    container_name: db
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=${INTERLINK_DB_ADMIN_PWD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  db:

@@ -139,6 +139,10 @@ func (c *Client) MakeRequest(method string, url string, payload Serializable, pr
 	return resp, err
 }
 
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.self.Do(req)
+}
+
 // Put Make a PUT HTTP request to the specified URL
 func (c *Client) Put(url string, payload Serializable, processor HttpRequestProcessor) (*http.Response, error) {
 	return c.MakeRequest(PUT, url, payload, processor)

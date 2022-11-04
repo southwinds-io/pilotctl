@@ -10,14 +10,14 @@ package main
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"net/http"
-	"os"
 	h "southwinds.dev/http"
 	"southwinds.dev/pilotctl/core"
-	"southwinds.dev/pilotctl/telem"
 )
 
 func main() {
+	godotenv.Load(".env")
 	// creates a generic http server
 	s := h.New("pilotctl", core.Version)
 	// add handlers
@@ -41,6 +41,8 @@ func main() {
 		router.HandleFunc("/ping", pingHandler).Methods(http.MethodPost)
 		router.HandleFunc("/register", registerHandler).Methods(http.MethodPost)
 		router.HandleFunc("/cve/upload", cveReportExportHandler).Methods(http.MethodPost)
+		router.HandleFunc("/metrics/{channel}", metricsHandler).Methods(http.MethodPost)
+		router.HandleFunc("/logs/{channel}", logsHandler).Methods(http.MethodPost)
 
 		// apply authorisation to admin user http handlers
 		router.Handle("/info/sync", s.Authorise(syncInfoHandler)).Methods(http.MethodPost)
@@ -78,20 +80,22 @@ func main() {
 		"^/register":         pilotAuth,
 		"^/ping":             pilotAuth,
 		"^/cve/upload":       pilotAuth,
+		"^/metrics/*":        pilotAuth,
+		"^/logs/*":           pilotAuth,
 		"^/activation/.*/.*": activationSvc,
 		"^/pub":              nil,
 		"^/$":                nil,
 	}
 	s.DefaultAuth = defaultAuth
-	s.Jobs = func() error {
-		enableTelemetry := os.Getenv("PILOTCTL_ENABLE_TELEMETRY")
-		if len(enableTelemetry) > 0 {
-			// launches the OT gateway
-			gateway := telem.NewOtServer(0)
-			go gateway.Start()
-		}
-		return nil
-	}
+	// s.Jobs = func() error {
+	// 	enableTelemetry := os.Getenv("PILOTCTL_ENABLE_TELEMETRY")
+	// 	if len(enableTelemetry) > 0 {
+	// 		// launches the OT gateway
+	// 		gateway := telem.NewOtServer(0)
+	// 		go gateway.Start()
+	// 	}
+	// 	return nil
+	// }
 	s.Serve()
 }
 

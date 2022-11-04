@@ -7,7 +7,7 @@ labels:
 env:
   CGO_ENABLED: 0
   GOARCH: amd64
-  REPO_NAME: registry.gitlab.com/southwinds/images
+  REPO_NAME: registry.gitlab.com/southwinds-pub/image
   APP_NAME: pilotctl
   # the application version
   APP_VERSION: 1.0.0
@@ -32,7 +32,8 @@ functions:
     description: builds and publishes the Pilot Control image
     run:
       - $(build-linux)
-      - docker build -t ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} .
+      - cp bin/pilotctl build/
+      - docker build -t ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} build
       - docker tag ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} ${REPO_NAME}/${APP_NAME}:latest
       - docker push ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION}
       - docker push ${REPO_NAME}/${APP_NAME}:latest

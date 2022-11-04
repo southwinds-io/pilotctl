@@ -62,18 +62,6 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		// if the ping request contains syslog events
-		if pingRequest.Events != nil && len(pingRequest.Events.Events) > 0 {
-			// adds extra information to the events
-			events, err := core.Api().Augment(pingRequest.Events)
-			// if the augmentation fails
-			if err != nil && len(events.Events) > 0 {
-				// log a warning but continue
-				log.Printf("WARNING: event augmentation failed for host uuid '%s': %s", events.Events[0].HostUUID, err)
-			}
-			// publish those events to registered sources
-			core.Api().PublishEvents(events)
-		}
 	}
 	// todo: add support for fx version
 	jobId, fxKey, _, err := core.Api().Ping()
@@ -923,6 +911,32 @@ func activationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := core.Api().SubmitMetrics(channel, content)
+	h.Write(w, r, result)
+}
+
+func logsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := core.Api().SubmitLogs(channel, content)
+	h.Write(w, r, result)
 }
 
 func isErr(w http.ResponseWriter, err error, statusCode int, msg string) bool {
