@@ -66,11 +66,11 @@ func (c *OtelDataPointConverter) Convert(md pmetric.Metrics) ([]DataPoint, error
 
 func (c *OtelDataPointConverter) writePoint(measurement string, tags map[string]string, fields map[string]interface{}, ts time.Time, vType MetricValueType) error {
 	c.points = append(c.points, DataPoint{
-		Measurement: measurement,
-		Tags:        tags,
-		Fields:      fields,
-		Time:        ts,
-		Type:        vType.String(),
+		Measure: measurement,
+		Tags:    tags,
+		Fields:  fields,
+		Time:    ts,
+		Type:    vType.String(),
 	})
 	return nil
 }
@@ -306,11 +306,6 @@ func (c *OtelDataPointConverter) initMetricTagsAndTimestamp(resource pcommon.Res
 	return
 }
 
-type DataPointWriter interface {
-	WritePoint(measurement string, tags map[string]string, fields map[string]interface{}, ts time.Time) error
-	Bytes() []byte
-}
-
 func resourceToTags(logger Logger, resource pcommon.Resource, tags map[string]string) (tagsAgain map[string]string) {
 	resource.Attributes().Range(func(k string, v pcommon.Value) bool {
 		if k == "" {
@@ -413,11 +408,11 @@ func otlpArrayToSlice(arr pcommon.Slice) []interface{} {
 }
 
 type DataPoint struct {
-	Measurement string                 `json:"m"`
-	Tags        map[string]string      `json:"t"`
-	Fields      map[string]interface{} `json:"f"`
-	Time        time.Time              `json:"ts"`
-	Type        string                 `json:"t"`
+	Measure string
+	Tags    map[string]string
+	Fields  map[string]interface{}
+	Time    time.Time
+	Type    string
 }
 
 type MetricValueType uint8
