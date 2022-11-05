@@ -978,9 +978,9 @@ func (r *API) GetCVEBaseline(score float64, label []string) ([]CvePackage, error
 func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 	var (
 		pbUnmarshall = pmetric.ProtoUnmarshaler{}
-		jsonMarshal  = pmetric.JSONMarshaler{}
 		conn         string
 		ok           bool
+		dpConv       = NewOtelDataPointConverter()
 	)
 	// find the connector to use based on the specified channel
 	if conn, ok = connectorName(channel); !ok {
@@ -1000,10 +1000,18 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 		}
 	}
 	// converts content to json
-	data, err := jsonMarshal.MarshalMetrics(metrics)
+	dataPoints, err := dpConv.Convert(metrics)
 	if err != nil {
 		return ConnResult{
-			Error:             fmt.Sprintf("cannot marshal request to json: %s", err),
+			Error:             fmt.Sprintf("cannot convert open telemetry metrics to data points: %s", err),
+			TotalEntries:      -1,
+			SuccessfulEntries: -1,
+		}
+	}
+	data, err := json.Marshal(dataPoints)
+	if err != nil {
+		return ConnResult{
+			Error:             fmt.Sprintf("cannot marshal data points to json: %s", err),
 			TotalEntries:      -1,
 			SuccessfulEntries: -1,
 		}
