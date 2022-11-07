@@ -25,6 +25,7 @@ import (
 	"southwinds.dev/artisan/registry"
 	h "southwinds.dev/http"
 	"southwinds.dev/interlink-client"
+	os2 "southwinds.dev/os"
 	. "southwinds.dev/pilotctl/types"
 	"strconv"
 	"strings"
@@ -990,55 +991,72 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 			SuccessfulEntries: -1,
 		}
 	}
-	// unmarshall the protobuf content
-	metrics, err := pbUnmarshall.UnmarshalMetrics(content)
+	files, err := os2.ReadFileBatchFromBytes(content)
 	if err != nil {
 		return ConnResult{
-			Error:             fmt.Sprintf("cannot unmarshal protobuf metrics, corrupted or invalid format: %s", err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
-		}
-	}
-	// converts content to json
-	dataPoints, err := dpConv.Convert(metrics)
-	if err != nil {
-		return ConnResult{
-			Error:             fmt.Sprintf("cannot convert open telemetry metrics to data points: %s", err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
-		}
-	}
-	data, err := json.Marshal(dataPoints)
-	if err != nil {
-		return ConnResult{
-			Error:             fmt.Sprintf("cannot marshal data points to json: %s", err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
-		}
-	}
-	// base 64 encode the json content
-	b64Data := base64.StdEncoding.EncodeToString(data)
-	// execute the connector passing in the json content
-	dir, _ := os.Getwd()
-	c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
-	c.Env = os.Environ()
-	outBytes, err := c.Output()
-	// extracts the response for the stdout
-	out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
-	if len(out) == 0 {
-		return ConnResult{
-			Error:             fmt.Sprintf("connector %s gave an empty response, execution failed: %s", conn, err),
+			Error:             fmt.Sprintf("cannot debatch telemetry metrics: %s", err),
 			TotalEntries:      -1,
 			SuccessfulEntries: -1,
 		}
 	}
 	result := new(ConnResult)
-	err = json.Unmarshal([]byte(out), result)
-	if err != nil {
-		return ConnResult{
-			Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
+	for i, file := range files {
+		// unmarshall the protobuf content
+		metrics, err := pbUnmarshall.UnmarshalMetrics(file)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("cannot unmarshal protobuf metrics, corrupted or invalid format: %s", err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		// converts content to json
+		dataPoints, err := dpConv.Convert(metrics)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("cannot convert open telemetry metrics to data points: %s", err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		data, err := json.Marshal(dataPoints)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("cannot marshal data points to json: %s", err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		// base 64 encode the json content
+		b64Data := base64.StdEncoding.EncodeToString(data)
+		// execute the connector passing in the json content
+		dir, _ := os.Getwd()
+		c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
+		c.Env = os.Environ()
+		outBytes, err := c.Output()
+		// extracts the response for the stdout
+		out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
+		if len(out) == 0 {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s gave an empty response, execution failed: %s", conn, err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		err = json.Unmarshal([]byte(out), result)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		if len(result.Error) > 0 {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s returned error: %s", conn, result.Error),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
 		}
 	}
 	return *result
@@ -1060,40 +1078,63 @@ func (r *API) SubmitLogs(channel string, content []byte) ConnResult {
 			SuccessfulEntries: -1,
 		}
 	}
-	// unmarshall the protobuf content
-	metrics, err := pbUnmarshall.UnmarshalLogs(content)
+	files, err := os2.ReadFileBatchFromBytes(content)
 	if err != nil {
 		return ConnResult{
-			Error:             fmt.Sprintf("cannot unmarshal logs: %s", err),
+			Error:             fmt.Sprintf("cannot debatch telemetry logs: %s", err),
 			TotalEntries:      -1,
 			SuccessfulEntries: -1,
 		}
 	}
-	// converts content to json
-	data, err := jsonMarshal.MarshalLogs(metrics)
-	if err != nil {
-		return ConnResult{
-			Error:             fmt.Sprintf("cannot marshal request to json: %s", err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
-		}
-	}
-	// base 64 encode the json content
-	b64Data := base64.StdEncoding.EncodeToString(data)
-	// execute the connector passing in the json content
-	dir, _ := os.Getwd()
-	c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
-	c.Env = os.Environ()
-	outBytes, err := c.Output()
-	// extracts the response for the stdout
-	out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
 	result := new(ConnResult)
-	err = json.Unmarshal([]byte(out), result)
-	if err != nil {
-		return ConnResult{
-			Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
-			TotalEntries:      -1,
-			SuccessfulEntries: -1,
+	for i, file := range files {
+		// unmarshall the protobuf content
+		logs, err := pbUnmarshall.UnmarshalLogs(file)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("cannot unmarshal logs: %s", err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		// converts content to json
+		data, err := jsonMarshal.MarshalLogs(logs)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("cannot marshal request to json: %s", err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		// base 64 encode the json content
+		b64Data := base64.StdEncoding.EncodeToString(data)
+		// execute the connector passing in the json content
+		dir, _ := os.Getwd()
+		c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
+		c.Env = os.Environ()
+		outBytes, err := c.Output()
+		out := regexp.MustCompile("{\"e\":.*}").FindString(string(outBytes[:]))
+		if len(out) == 0 {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s gave an empty response, execution failed: %s", conn, err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		err = json.Unmarshal([]byte(out), result)
+		if err != nil {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s gave an invalid result format, unmarshalling failed: %s", conn, err),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
+		}
+		if len(result.Error) > 0 {
+			return ConnResult{
+				Error:             fmt.Sprintf("connector %s returned error: %s", conn, result.Error),
+				TotalEntries:      len(files),
+				SuccessfulEntries: i,
+			}
 		}
 	}
 	return *result
