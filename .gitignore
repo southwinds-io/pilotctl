@@ -2,3 +2,4 @@
 bin/
 pilotctl
 *-metrics
+*-logs

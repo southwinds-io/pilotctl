@@ -33,6 +33,7 @@ functions:
     run:
       - $(build-linux)
       - cp bin/pilotctl build/
+      - docker pull registry.access.redhat.com/ubi8/ubi-minimal
       - docker build -t ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} build
       - docker tag ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} ${REPO_NAME}/${APP_NAME}:latest
       - docker push ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION}
