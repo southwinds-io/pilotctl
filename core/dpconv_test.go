@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"os"
 	"path/filepath"
+	os2 "southwinds.dev/os"
 	"testing"
 )
 
@@ -23,11 +24,23 @@ func TestDbConv(t *testing.T) {
 	entries, _ := os.ReadDir("test-data")
 	for _, entry := range entries {
 		content, _ := os.ReadFile(filepath.Join("test-data", entry.Name()))
-		metrics, _ := pb.UnmarshalMetrics(content)
-		points, _ := c.Convert(metrics)
-		for _, point := range points {
-			b, _ := json.Marshal(point)
-			fmt.Println(string(b[:]))
+		files, err := os2.ReadFileBatchFromBytes(content)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		for _, file := range files {
+			metrics, err := pb.UnmarshalMetrics(file)
+			if err != nil {
+				t.Fatalf(err.Error())
+			}
+			points, err := c.Convert(metrics)
+			if err != nil {
+				t.Fatalf(err.Error())
+			}
+			for _, point := range points {
+				b, _ := json.Marshal(point)
+				fmt.Println(string(b[:]))
+			}
 		}
 	}
 }
