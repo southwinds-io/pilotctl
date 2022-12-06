@@ -30,7 +30,7 @@ USER $UNAME
 
 WORKDIR /app
 
-COPY pilotctl mongo-metrics mongo-logs pravega-metrics svc.yaml ./
+COPY pilotctl mongo-metrics mongo-logs pravega-metrics influx-metrics svc.yaml ./
 
 # mount for PGP signing key
 VOLUME /keys
