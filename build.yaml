@@ -44,7 +44,7 @@ functions:
     run:
       - $(build-linux)
       - cp bin/pilotctl build/
-      - docker build -t ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} .
+      - docker build -t ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} build
       - docker tag ${REPO_NAME}/${APP_NAME}:${BUILD_VERSION} ${REPO_NAME}/${APP_NAME}:latest
 
   - name: up
