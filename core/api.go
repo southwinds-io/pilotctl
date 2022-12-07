@@ -13,23 +13,24 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/plog"
-	"go.opentelemetry.io/collector/pdata/pmetric"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"southwinds.dev/artisan/core"
 	"southwinds.dev/artisan/data"
 	"southwinds.dev/artisan/registry"
 	h "southwinds.dev/http"
-	"southwinds.dev/interlink-client"
+	ilink "southwinds.dev/interlink-client"
 	os2 "southwinds.dev/os"
 	. "southwinds.dev/pilotctl/types"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // API backend services API
@@ -984,6 +985,8 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 		dpConv       = NewOtelDataPointConverter()
 	)
 	// find the connector to use based on the specified channel
+
+	log.Printf("Channel name to be used is %s \n", channel)
 	if conn, ok = connectorName(channel); !ok {
 		return ConnResult{
 			Error:             fmt.Sprintf("telemetry connector not defined, skipping telemetry recording"),
@@ -991,6 +994,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 			SuccessfulEntries: -1,
 		}
 	}
+	log.Printf("Pilot control to be used is %s \n", conn)
 	files, err := os2.ReadFileBatchFromBytes(content)
 	if err != nil {
 		return ConnResult{
@@ -999,6 +1003,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 			SuccessfulEntries: -1,
 		}
 	}
+	log.Printf("readFileBatchFromBytes completed \n")
 	result := new(ConnResult)
 	for i, file := range files {
 		// unmarshall the protobuf content
@@ -1011,6 +1016,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 			}
 		}
 		// converts content to json
+		log.Printf("pbUnmarshall.UnmarshalMetrics completed \n")
 		dataPoints, err := dpConv.Convert(metrics)
 		if err != nil {
 			return ConnResult{
@@ -1019,6 +1025,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 				SuccessfulEntries: i,
 			}
 		}
+		log.Printf("dpConv.Convert(metrics) completed \n")
 		data, err := json.Marshal(dataPoints)
 		if err != nil {
 			return ConnResult{
@@ -1027,10 +1034,12 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 				SuccessfulEntries: i,
 			}
 		}
+		log.Printf("json.Marshal(dataPoints) completed \n")
 		// base 64 encode the json content
 		b64Data := base64.StdEncoding.EncodeToString(data)
 		// execute the connector passing in the json content
 		dir, _ := os.Getwd()
+		log.Printf("conneector command to be executed is %s %s \n", fmt.Sprintf("%s/%s", dir, conn), b64Data)
 		c := exec.Command(fmt.Sprintf("%s/%s", dir, conn), b64Data)
 		c.Env = os.Environ()
 		outBytes, err := c.Output()
@@ -1043,6 +1052,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 				SuccessfulEntries: i,
 			}
 		}
+		log.Printf("regexp.MustCompile completed \n")
 		err = json.Unmarshal([]byte(out), result)
 		if err != nil {
 			return ConnResult{
@@ -1051,6 +1061,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 				SuccessfulEntries: i,
 			}
 		}
+		log.Printf("regexp.MustCompile then json.Unmarshal completed \n")
 		if len(result.Error) > 0 {
 			return ConnResult{
 				Error:             fmt.Sprintf("connector %s returned error: %s", conn, result.Error),
@@ -1058,6 +1069,7 @@ func (r *API) SubmitMetrics(channel string, content []byte) ConnResult {
 				SuccessfulEntries: i,
 			}
 		}
+		log.Printf("regexp.MustCompile then returning \n")
 	}
 	return *result
 }
