@@ -1,0 +1,961 @@
+/*
+   Pilot Control Service
+   Copyright (C) 2022-Present SouthWinds Tech Ltd - www.southwinds.io
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU Affero General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Affero General Public License for more details.
+
+   You should have received a copy of the GNU Affero General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package main
+
+// @title Pilot Control Service
+// @version 1.0.0
+// @description Control Service for Pilot agents
+// @contact.url http://www.southwinds.io/
+// @contact.email admin@southwinds.io
+// @license.name GNU Affero GPL 3.0
+// @license.url https://www.gnu.org/licenses/agpl-3.0-standalone.html
+
+import (
+	"crypto/tls"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"github.com/gorilla/mux"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	h "southwinds.dev/http"
+	"southwinds.dev/pilotctl/core"
+	_ "southwinds.dev/pilotctl/docs"
+	. "southwinds.dev/pilotctl/types"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// pingHandler excluded from swagger as it is accessed by pilot with a special time-bound access token
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("cannot read ping request body: %s\n", err)
+		http.Error(w, "cannot read ping request body, check the server logs\n", http.StatusBadRequest)
+		return
+	}
+	if len(body) > 0 {
+		pingRequest := &PingRequest{}
+		err = json.Unmarshal(body, pingRequest)
+		if err != nil {
+			log.Printf("cannot unmarshal ping request body: %s\n", err)
+			http.Error(w, "cannot unmarshal ping request body, check the server logs\n", http.StatusBadRequest)
+			return
+		}
+		// if the ping request contains a job result
+		if pingRequest.Result != nil {
+			// persist the result of the job
+			err = core.Api().CompleteJob(pingRequest.Result)
+			if err != nil {
+				log.Printf("cannot set job status: %s\n", err)
+				http.Error(w, "set job status, check the server logs\n", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	// todo: add support for fx version
+	jobId, fxKey, _, err := core.Api().Ping()
+	if err != nil {
+		log.Printf("can't record ping time: %v\n", err)
+		http.Error(w, "can't record ping time, check the server logs\n", http.StatusInternalServerError)
+		return
+	}
+	// create a command with no job
+	var cmdValue = &CmdInfo{
+		JobId: jobId,
+	}
+	// if we have a job to execute
+	if jobId > 0 {
+		// fetches the definition for the job function to run from Onix
+		cmdValue, err = core.Api().GetCommandValue(fxKey)
+		if err != nil {
+			log.Printf("can't retrieve Artisan function definition from Onix: %v\n", err)
+			http.Error(w, "can't retrieve Artisan function definition from Onix, check server logs\n", http.StatusInternalServerError)
+			return
+		}
+		// set the job reference
+		cmdValue.JobId = jobId
+	}
+	cr, err := NewPingResponse(*cmdValue, core.Api().PingInterval())
+	if err != nil {
+		log.Printf("can't sign ping response: %v\n", err)
+		http.Error(w, "can't sign ping response, check the server logs\n", http.StatusInternalServerError)
+		return
+	}
+	bytes, err := json.Marshal(cr)
+	if err != nil {
+		log.Printf("can't marshal ping response: %s\n", err)
+		http.Error(w, "can't marshal ping response, check the server logs\n", http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusCreated)
+	w.Write(bytes)
+}
+
+func cveReportExportHandler(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("cannot read CVE export payload: %s\n", err)
+		http.Error(w, "cannot read CVE export payload, check the server logs\n", http.StatusBadRequest)
+		return
+	}
+	cveRequest := new(CveRequest)
+	err = json.Unmarshal(body, cveRequest)
+	if err != nil {
+		log.Printf("cannot unmarshal CVE export payload: %s\n", err)
+		http.Error(w, "cannot unmarshal CVE export payload, check the server logs\n", http.StatusBadRequest)
+		return
+	}
+	report, err := NewCveReport(cveRequest.Report)
+	if err != nil {
+		log.Printf("cannot load CVE report: %s\n", err)
+		http.Error(w, "cannot load CVE report, check the server logs\n", http.StatusBadRequest)
+		return
+	}
+	err = core.Api().UpsertCVE(cveRequest.HostUUID, report)
+	if err != nil {
+		log.Printf("cannot update CVE information: %s\n", err)
+		http.Error(w, "cannot update CVE information, check the server logs\n", http.StatusBadRequest)
+		return
+	}
+}
+
+// @Summary Get CVE Baseline
+// @Description Returns a list of packages that must be updated to fix CVEs across hosts
+// @Tags Report
+// @Router /cve/baseline [get]
+// @Param score query string false "the minimum CVSS score to include in the baseline"
+// @Param label query string false "a pipe | separated list of labels associated to the host(s) to include in the baseline"
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getCVEBaselineHandler(w http.ResponseWriter, r *http.Request) {
+	minScore := r.FormValue("score")
+	labels := r.FormValue("label")
+	var label []string
+	if len(labels) > 0 {
+		label = strings.Split(labels, "|")
+	}
+	score, err := strconv.ParseFloat(minScore, 32)
+	list, err := core.Api().GetCVEBaseline(score, label)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tracker := make(map[string]bool)
+	b := strings.Builder{}
+	b.WriteString("CVE-ID,CVSS-SCORE,PACKAGE,FIXED-IN\n")
+	for _, p := range list {
+		// dedup packages
+		if !tracker[p.PackageName] {
+			tracker[p.PackageName] = true
+			b.WriteString(fmt.Sprintf("%s,%v,%s,%s\n", p.CveID, p.CvssScore, p.PackageName, p.FixedIn))
+		}
+	}
+	w.Write([]byte(b.String()))
+}
+
+// @Summary Get All Hosts
+// @Description Returns a list of remote hosts
+// @Tags Host
+// @Router /host [get]
+// @Param og query string false "the organisation group key to filter the query"
+// @Param or query string false "the organisation key to filter the query"
+// @Param ar query string false "the area key to filter the query"
+// @Param lo query string false "the location key to filter the query"
+// @Param label query string false "a pipe | separated list of labels associated to the host(s) to retrieve"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func hostQueryHandler(w http.ResponseWriter, r *http.Request) {
+	orgGroup := r.FormValue("og")
+	org := r.FormValue("or")
+	area := r.FormValue("ar")
+	location := r.FormValue("lo")
+	labels := r.FormValue("label")
+	var label []string
+	if len(labels) > 0 {
+		label = strings.Split(labels, "|")
+	}
+	hosts, err := core.Api().GetHosts(orgGroup, org, area, location, label)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.Write(w, r, hosts)
+}
+
+// @Summary Decommissions a host
+// @Description removes the host from the list of available hosts so that it can be no longer managed
+// @Tags Host
+// @Router /host/{host-uuid} [delete]
+// @Param host-uuid path string true "the unique identifier for the host"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 204 {string} successful decommission
+func hostDecommissionHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	hostUUID := vars["host-uuid"]
+	err := core.Api().DecommissionHost(hostUUID)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// registerHandler excluded from swagger as it is accessed by pilot with a special time-bound access token
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	// get http body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		http.Error(w, "can't read body, check the server logs for more details", http.StatusBadRequest)
+		return
+	}
+	// unmarshal body
+	reg := &RegistrationRequest{}
+	err = json.Unmarshal(body, reg)
+	if err != nil {
+		log.Printf("Error unmarshalling body: %v", err)
+		http.Error(w, "can't unmarshal body, check the server logs for more details", http.StatusBadRequest)
+		return
+	}
+	regInfo, err := core.Api().Register(reg)
+	if err != nil {
+		log.Printf("Failed to register host, Onix responded with an error: %v", err)
+		http.Error(w, "Failed to register host, Onix responded with an error, check the server logs for more details", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("host %s - %s registered", reg.Hostname, reg.MachineId)
+	bytes, err := json.Marshal(regInfo)
+	if err != nil {
+		log.Printf("Failed to marshal registration configuration: %v", err)
+		http.Error(w, "Failed to marshal registration configuration, check the server logs for more details", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	w.Write(bytes)
+}
+
+// @Summary Create or Update a Command
+// @Description creates a new or updates an existing command definition
+// @Tags Command
+// @Router /cmd [put]
+// @Param command body types.Cmd true "the command definition"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func updateCmdHandler(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("failed to read request body: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	cmd := new(Cmd)
+	err = json.Unmarshal(bytes, cmd)
+	if err != nil {
+		log.Printf("failed to unmarshal request: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = core.Api().PutCommand(cmd)
+	if err != nil {
+		log.Printf("failed to set command: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// @Summary Get a Command definition
+// @Description get a specific a command definition
+// @Tags Command
+// @Router /cmd/{name} [get]
+// @Param name path string true "the unique name for the command to retrieve"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getCmdHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+	cmd, err := core.Api().GetCommand(name)
+	if err != nil {
+		log.Printf("can't query command with name '%s': %v\n", name, err)
+		http.Error(w, fmt.Sprintf("can't query command with name '%s': %v\n", name, err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, cmd)
+}
+
+// @Summary Delete a Command definition
+// @Description deletes a specific a command definition using the command name
+// @Tags Command
+// @Router /cmd/{name} [delete]
+// @Param name path string true "the unique name for the command to delete"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func deleteCmdHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+	resultingOperation, err := core.Api().DeleteCommand(name)
+	if err != nil {
+		log.Printf("can't delete command with name '%s': %v\n", name, err)
+		http.Error(w, fmt.Sprintf("can't delete command with name '%s', check server logs for more details\n", name), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, resultingOperation)
+}
+
+// @Summary Get all Command definitions
+// @Description gets a list of all command definitions
+// @Tags Command
+// @Router /cmd [get]
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getAllCmdHandler(w http.ResponseWriter, r *http.Request) {
+	cmds, err := core.Api().GetAllCommands()
+	if err != nil {
+		log.Printf("can't query list of commands: %v\n", err)
+		http.Error(w, fmt.Sprintf("can't query list of commands: %s\n", err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, cmds)
+}
+
+// @Summary Create a Job
+// @Description create a new job for execution on one or more remote hosts
+// @Tags Job
+// @Router /job [post]
+// @Param command body types.JobBatchInfo true "the information required to create a new job"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func newJobHandler(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("can't read http body: %v\n", err)
+		http.Error(w, fmt.Sprintf("can't read http body: check server logs\n"), http.StatusInternalServerError)
+		return
+	}
+	var batch = new(JobBatchInfo)
+	err = json.Unmarshal(bytes, batch)
+	if err != nil {
+		log.Printf("can't unmarshal http body: %v\n", err)
+		http.Error(w, fmt.Sprintf("can't unmarshal http body, check the server logs\n"), http.StatusInternalServerError)
+		return
+	}
+	jobBatchId, err := core.Api().CreateJobBatch(*batch)
+	if err != nil {
+		log.Printf("can't create job batch: %v\n", err)
+		http.Error(w, fmt.Sprintf("can't create job batch, check the server logs\n"), http.StatusInternalServerError)
+		return
+	}
+	// return the batch ID
+	w.Write([]byte(strconv.FormatInt(jobBatchId, 10)))
+}
+
+// @Summary Get Jobs
+// @Description Returns a list of jobs filtered by the specified logistics tags
+// @Tags Job
+// @Router /job [get]
+// @Param bid query int64 false "the unique identifier (number) of the job batch to retrieve"
+// @Param og query string false "the organisation group key to filter the query"
+// @Param or query string false "the organisation key to filter the query"
+// @Param ar query string false "the area key to filter the query"
+// @Param lo query string false "the location key to filter the query"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getJobsHandler(w http.ResponseWriter, r *http.Request) {
+	var bid *int64
+	batchId := r.FormValue("bid")
+	// if a batch id was provided
+	if len(batchId) > 0 {
+		id, parseErr := strconv.ParseInt(batchId, 10, 64)
+		if isErr(w, parseErr, http.StatusBadRequest, "cannot parse batch Id") {
+			return
+		}
+		bid = &id
+	}
+	orgGroup := r.FormValue("og")
+	org := r.FormValue("or")
+	area := r.FormValue("ar")
+	location := r.FormValue("lo")
+
+	jobs, err := core.Api().GetJobs(orgGroup, org, area, location, bid)
+	if isErr(w, err, http.StatusBadRequest, "cannot retrieve jobs from database") {
+		return
+	}
+	h.Write(w, r, jobs)
+}
+
+// @Summary Get Job Batches
+// @Description Returns a list of jobs batches with various filters
+// @Tags Job
+// @Router /job/batch [get]
+// @Param name query string false "the name of the batch as in name% format"
+// @Param owner query string false "the creator of the batch"
+// @Param label query string false "a pipe | separated list of labels associated to the batch"
+// @Param from query string false "the time from which to get batches (format should be dd-MM-yyyy)"
+// @Param to query string false "the time to which to get batches (format should be dd-MM-yyyy)"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getJobBatchHandler(w http.ResponseWriter, r *http.Request) {
+	nameParam := r.FormValue("name")
+	ownerParam := r.FormValue("owner")
+	labelParam := r.FormValue("label")
+	fromParam := r.FormValue("from")
+	toParam := r.FormValue("to")
+
+	var fromTime *time.Time
+	if len(fromParam) > 0 {
+		from, err := time.Parse("02-01-2006", fromParam)
+		if err != nil {
+			log.Printf("failed to parse FROM date '%s': %s\n", fromParam, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		fromTime = &from
+	}
+
+	var toTime *time.Time
+	if len(toParam) > 0 {
+		to, err := time.Parse("02-01-2006", toParam)
+		if err != nil {
+			log.Printf("failed to parse TO date '%s': %s\n", toParam, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		toTime = &to
+	}
+
+	var label []string
+	if len(labelParam) > 0 {
+		label = strings.Split(labelParam, "|")
+	}
+
+	var name, owner *string
+	if len(nameParam) > 0 {
+		name = &nameParam
+	}
+	if len(ownerParam) > 0 {
+		owner = &ownerParam
+	}
+	batches, err := core.Api().GetJobBatches(name, owner, fromTime, toTime, &label)
+	if err != nil {
+		log.Printf("failed to retrieve job batches: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, batches)
+}
+
+// @Summary Get Areas in Organisation Group
+// @Description Get a list of areas setup in an organisation group
+// @Tags Logistics
+// @Router /org-group/{org-group}/area [get]
+// @Param org-group path string true "the unique id for organisation group under which areas are defined"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getAreasHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	orgGroup := vars["org-group"]
+	areas, err := core.Api().GetAreas(orgGroup)
+	if err != nil {
+		log.Printf("failed to retrieve areas: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, areas)
+}
+
+// @Summary Get Organisation Groups
+// @Description Get a list of organisation groups
+// @Tags Logistics
+// @Router /org-group [get]
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getOrgGroupsHandler(w http.ResponseWriter, r *http.Request) {
+	areas, err := core.Api().GetOrgGroups()
+	if err != nil {
+		log.Printf("failed to retrieve org groups: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, areas)
+}
+
+// @Summary Get Organisations in Organisation Group
+// @Description Get a list of organisations setup in an organisation group
+// @Tags Logistics
+// @Router /org-group/{org-group}/org [get]
+// @Param org-group path string true "the unique id for organisation group under which organisations are defined"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getOrgHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	orgGroup := vars["org-group"]
+	areas, err := core.Api().GetOrgs(orgGroup)
+	if err != nil {
+		log.Printf("failed to retrieve organisations: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, areas)
+}
+
+// @Summary Get Locations in an Area
+// @Description Get a list of locations setup in an area
+// @Tags Logistics
+// @Router /area/{area}/location [get]
+// @Param area path string true "the unique id for area under which locations are defined"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getLocationsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	area := vars["area"]
+	areas, err := core.Api().GetLocations(area)
+	if err != nil {
+		log.Printf("failed to retrieve organisations: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, areas)
+}
+
+// @Summary Syncs logistics information
+// @Description uploads a spreadsheet file with logistics information (i.e. org groups, orgs, areas and locations)
+// @Description and synchronises the data with the backend
+// @Tags Logistics
+// @Accept application/vnd.ms-excel
+// @Produce application/json, application/yaml, application/xml
+// @Success 200 {string} data has been synced successfully
+// @Failure 400 {string} the uploaded file is in incorrect format
+// @Failure 500 {string} the server failed to complete the sync due to an unforeseen error
+// @Router /info/sync [post]
+// @Param dry-run query bool false "a flag indicating whether a dry-run (health check) should be performed without committing data to the backend"
+// @Param info-file formData file true "the spreadsheet file containing logistics information to be synced"
+func syncInfoHandler(w http.ResponseWriter, r *http.Request) {
+	// just in case dry-run by default
+	dryRun := true
+	dry := r.FormValue("dry-run")
+	if len(dry) > 0 {
+		dryRun, _ = strconv.ParseBool(dry)
+	}
+	// limits the size of incoming request bodies (in MB) to prevent clients from accidentally or maliciously
+	// sending a large request and wasting server resources
+	r.Body = http.MaxBytesReader(w, r.Body, 250<<20)
+
+	// parses the whole request body and up to a total of HttpUploadInMemoryLimit MB are stored in memory,
+	// with the remainder stored on disk in temporary files
+	err := r.ParseMultipartForm(150 << 20)
+	if err != nil {
+		log.Printf("error parsing info file: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	infoFile, _, err := r.FormFile("info-file")
+	if err != nil {
+		log.Printf("error retrieving info file: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	filePath, err := core.SaveInfo(infoFile)
+	if err != nil {
+		log.Printf("error saving info file: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out, err2 := core.SyncInfo(filePath, core.Api(), dryRun)
+	if err2 != nil {
+		log.Printf("error syncing info file: %s", err2)
+		http.Error(w, err2.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	h.Write(w, r, out)
+}
+
+// @Summary Admits a host into service
+// @Description inform pilotctl to accept management connections coming from a host pilot agent
+// @Description admitting a host also requires associating the relevant logistic information such as org, area and location for the host
+// @Tags Admission
+// @Router /admission [put]
+// @Param command body []types.Admission true "the required admission information"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func setAdmissionHandler(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var admissions []Admission
+	err = json.Unmarshal(bytes, &admissions)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, admission := range admissions {
+		err = core.Api().SetAdmission(admission)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// @Summary Get Artisan Packages
+// @Description get a list of packages in the backing Artisan registry
+// @Tags Registry
+// @Router /package [get]
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getPackagesHandler(w http.ResponseWriter, r *http.Request) {
+	packages, err := core.Api().GetPackages()
+	if err != nil {
+		log.Printf("failed to retrieve package list from Artisan Registry: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, packages)
+}
+
+// @Summary Get the API of an Artisan Package
+// @Description get a list of exported functions and inputs for the specified package
+// @Tags Registry
+// @Router /package/{name}/api [get]
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+// @Param name path string true "the fully qualified name of the artisan package having the required API"
+func getPackagesApiHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+	n, err := url.PathUnescape(name)
+	if err != nil {
+		log.Printf("failed to unescape package name '%s': %s\n", name, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	api, err := core.Api().GetPackageAPI(n)
+	if err != nil {
+		log.Printf("failed to get package API from registry: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, api)
+}
+
+// @Summary Retrieve the logged user principal
+// @Description Retrieve the logged user principal containing a list of access controls granted to the user
+// @Description use it primarily to log in user interface services and retrieve a list of access controls to inform which
+// @Description operations are available to the user via the user interface
+// @Tags Access Control
+// @Router /user [get]
+// @Accepts json
+// @Produce plain
+// @Failure 401 {string} the request failed to authenticate the user
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getUserHandler(w http.ResponseWriter, r *http.Request) {
+	// if we got this far is because the user is authenticated
+	// then return the access controls for the user
+	user := h.GetUserPrincipal(r)
+	if user != nil {
+		h.Write(w, r, user)
+	}
+}
+
+// @Summary Retrieve the service public PGP key
+// @Description Retrieve the service public PGP key used to verify the authenticity of the service by pilot agents
+// @Tags PGP
+// @Router /pub [get]
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getKeyHandler(w http.ResponseWriter, r *http.Request) {
+	// load the verification key
+	path, err := KeyFilePath("verify")
+	if err != nil {
+		log.Printf("cannot find public PGP key: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	key, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("cannot read public PGP key file: %s\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte(hex.EncodeToString(key)))
+}
+
+// @Summary Registers a Host so that it can be activated
+// @Description requests the activation service to reserve an activation for a host of the specified mac-address
+// @Tags Activation
+// @Router /registration [post]
+// @Param command body []types.Registration true "the required registration information"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 201 {string} OK
+func registrationHandler(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("cannot read payload: %s\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var registrations []Registration
+	err = json.Unmarshal(bytes, &registrations)
+	if err != nil {
+		log.Printf("cannot unmarshal payload: %s\nthe payload was: '%s'\n", err, string(bytes[:]))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c := core.NewConf()
+	for _, registration := range registrations {
+		client := &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+			Timeout:   60 * time.Second,
+		}
+		// call activation service and reserve the mac-address for this tenant
+		_, err = core.HttpRequest(client, fmt.Sprintf("%s/provision/%s/%s", c.GetActivationURI(), c.GetTenant(), registration.MacAddress), "POST", c.GetActivationUser(), c.GetActivationPwd(), 201)
+		if err != nil {
+			log.Printf("cannot provision mac-address %s with activation service: %s\n", registration.MacAddress, err)
+			http.Error(w, fmt.Sprintf("cannot provision mac-address %s with activation service, check the server logs for more information\n", registration.MacAddress), http.StatusInternalServerError)
+			return
+		}
+		// as the provisioning of the mac-address has been successful records the host in pilot-ctl db
+		err = core.Api().SetRegistration(registration)
+		if err != nil {
+			log.Printf("cannot record registration information in database: %s\n", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// @Summary Undo a Host Registration
+// @Description undoes a host registration providing the host has not yet activated / admitted
+// @Tags Activation
+// @Router /registration/{mac-address} [delete]
+// @Param mac-address path string true "the mac address of the host to be un-registered"
+// @Produce json
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func undoRegistrationHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	mac, err := url.QueryUnescape(vars["mac-address"])
+	if err != nil {
+		log.Printf("cannot unsecape path variable mac-address: %v", err)
+		http.Error(w, fmt.Sprintf("cannot unsecape path variable mac-address: %v", err), http.StatusBadRequest)
+		return
+	}
+	err = core.Api().UndoRegistration(mac)
+	if err != nil {
+		log.Printf("Failed to unregister host: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to unregister host: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("mac address %s unregistered", mac)
+	w.WriteHeader(http.StatusOK)
+}
+
+// @Summary Get a Dictionary
+// @Description Retrieve a dictionary using its natural key
+// @Tags Dictionary
+// @Router /dictionary/{key} [get]
+// @Param key path string true "the unique key for the dictionary to get"
+// @Produce application/json, application/yaml, application/xml
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getDictionaryHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+	dict, err := core.Api().GetDictionary(key)
+	if err != nil {
+		log.Printf("can't query dictionary with key '%s': %v\n", key, err)
+		http.Error(w, fmt.Sprintf("can't query dictionary with key '%s': %v\n", key, err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, dict)
+}
+
+// @Summary Set a Dictionary
+// @Description Creates or Update a dictionary using its natural key
+// @Tags Dictionary
+// @Router /dictionary [put]
+// @Param dictionary body types.Dictionary true "the dictionary to create or update"
+// @Accepts json
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func setDictionaryHandler(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("failed to read request body: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dict := new(Dictionary)
+	err = json.Unmarshal(bytes, dict)
+	if err != nil {
+		log.Printf("failed to unmarshal request: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result, err := core.Api().SetDictionary(*dict)
+	if err != nil {
+		log.Printf("can't put dictionary with key '%s': %v\n", dict.Key, err)
+		http.Error(w, fmt.Sprintf("can't put dictionary with key '%s': %v\n", dict.Key, err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, result)
+}
+
+// @Summary Delete a Dictionary
+// @Description Delete a dictionary using its natural key
+// @Tags Dictionary
+// @Router /dictionary/{key} [delete]
+// @Param key path string true "the unique key for the dictionary to delete"
+// @Produce plain
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func deleteDictionaryHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+	result, err := core.Api().DeleteDictionary(key)
+	if err != nil {
+		log.Printf("can't delete dictionary with key '%s': %v\n", key, err)
+		http.Error(w, fmt.Sprintf("can't delete dictionary with key '%s': %v\n", key, err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, result)
+}
+
+// @Summary Get a List of Dictionaries
+// @Description Retrieve a list of available dictionaries
+// @Tags Dictionary
+// @Router /dictionary [get]
+// @Param values query bool false "a flag indicating if all dictionary values should be returned (true) or only key and description"
+// @Produce application/json, application/yaml, application/xml
+// @Failure 500 {string} there was an error in the server, check the server logs
+// @Success 200 {string} OK
+func getDictionaryListHandler(w http.ResponseWriter, r *http.Request) {
+	values := false
+	values, _ = strconv.ParseBool(r.FormValue("values"))
+	result, err := core.Api().GetDictionaries(values)
+	if err != nil {
+		log.Printf("can't retrieve dictionaries: %v\n", err)
+		http.Error(w, fmt.Sprintf("can't retrieve dictionaries: %v\n", err), http.StatusInternalServerError)
+		return
+	}
+	h.Write(w, r, result)
+}
+
+// activationHandler notifies PilotCtl of a Host Activation
+// used by the activation service to notify pilot control that a host has been issued with an activation key
+// not in swagger as it authenticates with activation service credentials
+func activationHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	macAddr := vars["macAddress"]
+	ma, err := url.PathUnescape(macAddr)
+	if err != nil {
+		log.Printf("failed to unescape mac-address '%s': %s\n", macAddr, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	uuid := vars["uuid"]
+	id, err := url.PathUnescape(uuid)
+	if err != nil {
+		log.Printf("failed to unescape host UUID '%s': %s\n", uuid, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	err = core.Api().AdmitRegistered(ma, id)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := core.Api().SubmitMetrics(channel, content)
+	h.Write(w, r, result)
+}
+
+func logsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := core.Api().SubmitLogs(channel, content)
+	h.Write(w, r, result)
+}
+
+func isErr(w http.ResponseWriter, err error, statusCode int, msg string) bool {
+	if err != nil {
+		msg = fmt.Sprintf("%s: %s\n", msg, err)
+		log.Printf(msg)
+		w.WriteHeader(statusCode)
+		w.Write([]byte(msg))
+		return true
+	}
+	return false
+}

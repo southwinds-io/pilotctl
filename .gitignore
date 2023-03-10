@@ -1,0 +1,7 @@
+.idea
+.proto
+bin/
+pilotctl
+*-metrics
+*-logs
+redfish_test.go

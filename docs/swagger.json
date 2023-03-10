@@ -1,0 +1,1243 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Control Service for Pilot agents",
+        "title": "Pilot Control Service",
+        "contact": {
+            "url": "http://www.southwinds.io/",
+            "email": "admin@southwinds.io"
+        },
+        "license": {
+            "name": "GNU Affero GPL 3.0",
+            "url": "https://www.gnu.org/licenses/agpl-3.0-standalone.html"
+        },
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/admission": {
+            "put": {
+                "description": "inform pilotctl to accept management connections coming from a host pilot agent\nadmitting a host also requires associating the relevant logistic information such as org, area and location for the host",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Admission"
+                ],
+                "summary": "Admits a host into service",
+                "parameters": [
+                    {
+                        "description": "the required admission information",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.Admission"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/area/{area}/location": {
+            "get": {
+                "description": "Get a list of locations setup in an area",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Logistics"
+                ],
+                "summary": "Get Locations in an Area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique id for area under which locations are defined",
+                        "name": "area",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/cmd": {
+            "get": {
+                "description": "gets a list of all command definitions",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Command"
+                ],
+                "summary": "Get all Command definitions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "creates a new or updates an existing command definition",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Command"
+                ],
+                "summary": "Create or Update a Command",
+                "parameters": [
+                    {
+                        "description": "the command definition",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.Cmd"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/cmd/{name}": {
+            "get": {
+                "description": "get a specific a command definition",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Command"
+                ],
+                "summary": "Get a Command definition",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique name for the command to retrieve",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "deletes a specific a command definition using the command name",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Command"
+                ],
+                "summary": "Delete a Command definition",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique name for the command to delete",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/cve/baseline": {
+            "get": {
+                "description": "Returns a list of packages that must be updated to fix CVEs across hosts",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Report"
+                ],
+                "summary": "Get CVE Baseline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the minimum CVSS score to include in the baseline",
+                        "name": "score",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "a pipe | separated list of labels associated to the host(s) to include in the baseline",
+                        "name": "label",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/dictionary": {
+            "get": {
+                "description": "Retrieve a list of available dictionaries",
+                "produces": [
+                    "application/json",
+                    " application/yaml",
+                    " application/xml"
+                ],
+                "tags": [
+                    "Dictionary"
+                ],
+                "summary": "Get a List of Dictionaries",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "a flag indicating if all dictionary values should be returned (true) or only key and description",
+                        "name": "values",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Creates or Update a dictionary using its natural key",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Dictionary"
+                ],
+                "summary": "Set a Dictionary",
+                "parameters": [
+                    {
+                        "description": "the dictionary to create or update",
+                        "name": "dictionary",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.Dictionary"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/dictionary/{key}": {
+            "get": {
+                "description": "Retrieve a dictionary using its natural key",
+                "produces": [
+                    "application/json",
+                    " application/yaml",
+                    " application/xml"
+                ],
+                "tags": [
+                    "Dictionary"
+                ],
+                "summary": "Get a Dictionary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique key for the dictionary to get",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a dictionary using its natural key",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Dictionary"
+                ],
+                "summary": "Delete a Dictionary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique key for the dictionary to delete",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/host": {
+            "get": {
+                "description": "Returns a list of remote hosts",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Host"
+                ],
+                "summary": "Get All Hosts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the organisation group key to filter the query",
+                        "name": "og",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the organisation key to filter the query",
+                        "name": "or",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the area key to filter the query",
+                        "name": "ar",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the location key to filter the query",
+                        "name": "lo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "a pipe | separated list of labels associated to the host(s) to retrieve",
+                        "name": "label",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/host/{host-uuid}": {
+            "delete": {
+                "description": "removes the host from the list of available hosts so that it can be no longer managed",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Host"
+                ],
+                "summary": "Decommissions a host",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique identifier for the host",
+                        "name": "host-uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/info/sync": {
+            "post": {
+                "description": "uploads a spreadsheet file with logistics information (i.e. org groups, orgs, areas and locations)\nand synchronises the data with the backend",
+                "consumes": [
+                    "application/vnd.ms-excel"
+                ],
+                "produces": [
+                    "application/json",
+                    " application/yaml",
+                    " application/xml"
+                ],
+                "tags": [
+                    "Logistics"
+                ],
+                "summary": "Syncs logistics information",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "a flag indicating whether a dry-run (health check) should be performed without committing data to the backend",
+                        "name": "dry-run",
+                        "in": "query"
+                    },
+                    {
+                        "type": "file",
+                        "description": "the spreadsheet file containing logistics information to be synced",
+                        "name": "info-file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/job": {
+            "get": {
+                "description": "Returns a list of jobs filtered by the specified logistics tags",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Job"
+                ],
+                "summary": "Get Jobs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "the unique identifier (number) of the job batch to retrieve",
+                        "name": "bid",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the organisation group key to filter the query",
+                        "name": "og",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the organisation key to filter the query",
+                        "name": "or",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the area key to filter the query",
+                        "name": "ar",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the location key to filter the query",
+                        "name": "lo",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new job for execution on one or more remote hosts",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Job"
+                ],
+                "summary": "Create a Job",
+                "parameters": [
+                    {
+                        "description": "the information required to create a new job",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.JobBatchInfo"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/job/batch": {
+            "get": {
+                "description": "Returns a list of jobs batches with various filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Job"
+                ],
+                "summary": "Get Job Batches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the name of the batch as in name% format",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the creator of the batch",
+                        "name": "owner",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "a pipe | separated list of labels associated to the batch",
+                        "name": "label",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the time from which to get batches (format should be dd-MM-yyyy)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the time to which to get batches (format should be dd-MM-yyyy)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/org-group": {
+            "get": {
+                "description": "Get a list of organisation groups",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Logistics"
+                ],
+                "summary": "Get Organisation Groups",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/org-group/{org-group}/area": {
+            "get": {
+                "description": "Get a list of areas setup in an organisation group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Logistics"
+                ],
+                "summary": "Get Areas in Organisation Group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique id for organisation group under which areas are defined",
+                        "name": "org-group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/org-group/{org-group}/org": {
+            "get": {
+                "description": "Get a list of organisations setup in an organisation group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Logistics"
+                ],
+                "summary": "Get Organisations in Organisation Group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the unique id for organisation group under which organisations are defined",
+                        "name": "org-group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/package": {
+            "get": {
+                "description": "get a list of packages in the backing Artisan registry",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Registry"
+                ],
+                "summary": "Get Artisan Packages",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/package/{name}/api": {
+            "get": {
+                "description": "get a list of exported functions and inputs for the specified package",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Registry"
+                ],
+                "summary": "Get the API of an Artisan Package",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the fully qualified name of the artisan package having the required API",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/pub": {
+            "get": {
+                "description": "Retrieve the service public PGP key used to verify the authenticity of the service by pilot agents",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "PGP"
+                ],
+                "summary": "Retrieve the service public PGP key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/registration": {
+            "post": {
+                "description": "requests the activation service to reserve an activation for a host of the specified mac-address",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Activation"
+                ],
+                "summary": "Registers a Host so that it can be activated",
+                "parameters": [
+                    {
+                        "description": "the required registration information",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.Registration"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/registration/{mac-address}": {
+            "delete": {
+                "description": "undoes a host registration providing the host has not yet activated / admitted",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activation"
+                ],
+                "summary": "Undo a Host Registration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the mac address of the host to be un-registered",
+                        "name": "mac-address",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/user": {
+            "get": {
+                "description": "Retrieve the logged user principal containing a list of access controls granted to the user\nuse it primarily to log in user interface services and retrieve a list of access controls to inform which\noperations are available to the user via the user interface",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Access Control"
+                ],
+                "summary": "Retrieve the logged user principal",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "data.File": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "description": "the file content",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "a description of the intended use of this file",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "the unique reference for the file",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "path to the file within the Artisan registry",
+                    "type": "string"
+                }
+            }
+        },
+        "data.Input": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "description": "required by configuration files",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/data.File"
+                    }
+                },
+                "secret": {
+                    "description": "required string value secrets",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/data.Secret"
+                    }
+                },
+                "var": {
+                    "description": "required variables",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/data.Var"
+                    }
+                }
+            }
+        },
+        "data.Secret": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "a description of the intended use or meaning of this secret",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "the unique reference for the secret",
+                    "type": "string"
+                },
+                "required": {
+                    "description": "the value is required",
+                    "type": "boolean"
+                },
+                "value": {
+                    "description": "the value of the secret",
+                    "type": "string"
+                }
+            }
+        },
+        "data.Var": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.Admission": {
+            "type": "object",
+            "properties": {
+                "area": {
+                    "type": "string"
+                },
+                "host_uuid": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "location": {
+                    "type": "string"
+                },
+                "org": {
+                    "type": "string"
+                },
+                "org_group": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.Cmd": {
+            "type": "object",
+            "properties": {
+                "containerised": {
+                    "description": "run command in runtime",
+                    "type": "boolean"
+                },
+                "description": {
+                    "description": "description of the command",
+                    "type": "string"
+                },
+                "function": {
+                    "description": "the function in the package to call",
+                    "type": "string"
+                },
+                "input": {
+                    "description": "the function input information",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/data.Input"
+                        }
+                    ]
+                },
+                "key": {
+                    "description": "the natural key uniquely identifying the command",
+                    "type": "string"
+                },
+                "package": {
+                    "description": "the package to use",
+                    "type": "string"
+                },
+                "pwd": {
+                    "description": "the package registry password",
+                    "type": "string"
+                },
+                "user": {
+                    "description": "the package registry user",
+                    "type": "string"
+                },
+                "verbose": {
+                    "description": "enables verbose output",
+                    "type": "boolean"
+                }
+            }
+        },
+        "types.Dictionary": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Description describe the purpose / content of the dictionary",
+                    "type": "string"
+                },
+                "key": {
+                    "description": "Key a natural key used to uniquely identify this dictionary for the purpose of idempotent opeartions",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name a friendly name for the dictionary",
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "Tags a list of string based tags used for categorising the dictionary",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "values": {
+                    "description": "Values a map containing key/value pairs that are the content held by the dictionary",
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "types.JobBatchInfo": {
+            "type": "object",
+            "properties": {
+                "fx_key": {
+                    "description": "the unique key of the function to run",
+                    "type": "string"
+                },
+                "fx_version": {
+                    "description": "the version of the function to run",
+                    "type": "integer"
+                },
+                "host_uuid": {
+                    "description": "the universally unique host identifier created by pilot",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "label": {
+                    "description": "one or more search labels",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "description": "the name of the batch (not unique, a user-friendly name)",
+                    "type": "string"
+                },
+                "notes": {
+                    "description": "any relevant notes for the batch (not mandatory)",
+                    "type": "string"
+                }
+            }
+        },
+        "types.Registration": {
+            "type": "object",
+            "properties": {
+                "area": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "location": {
+                    "type": "string"
+                },
+                "mac_address": {
+                    "type": "string"
+                },
+                "org": {
+                    "type": "string"
+                },
+                "org_group": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

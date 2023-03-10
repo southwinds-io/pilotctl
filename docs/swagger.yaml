@@ -1,0 +1,846 @@
+definitions:
+  data.File:
+    properties:
+      content:
+        description: the file content
+        type: string
+      description:
+        description: a description of the intended use of this file
+        type: string
+      name:
+        description: the unique reference for the file
+        type: string
+      path:
+        description: path to the file within the Artisan registry
+        type: string
+    type: object
+  data.Input:
+    properties:
+      file:
+        description: required by configuration files
+        items:
+          $ref: '#/definitions/data.File'
+        type: array
+      secret:
+        description: required string value secrets
+        items:
+          $ref: '#/definitions/data.Secret'
+        type: array
+      var:
+        description: required variables
+        items:
+          $ref: '#/definitions/data.Var'
+        type: array
+    type: object
+  data.Secret:
+    properties:
+      description:
+        description: a description of the intended use or meaning of this secret
+        type: string
+      name:
+        description: the unique reference for the secret
+        type: string
+      required:
+        description: the value is required
+        type: boolean
+      value:
+        description: the value of the secret
+        type: string
+    type: object
+  data.Var:
+    properties:
+      default:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      required:
+        type: boolean
+      type:
+        type: string
+      value:
+        type: string
+    type: object
+  types.Admission:
+    properties:
+      area:
+        type: string
+      host_uuid:
+        type: string
+      label:
+        items:
+          type: string
+        type: array
+      location:
+        type: string
+      org:
+        type: string
+      org_group:
+        type: string
+    type: object
+  types.Cmd:
+    properties:
+      containerised:
+        description: run command in runtime
+        type: boolean
+      description:
+        description: description of the command
+        type: string
+      function:
+        description: the function in the package to call
+        type: string
+      input:
+        allOf:
+        - $ref: '#/definitions/data.Input'
+        description: the function input information
+      key:
+        description: the natural key uniquely identifying the command
+        type: string
+      package:
+        description: the package to use
+        type: string
+      pwd:
+        description: the package registry password
+        type: string
+      user:
+        description: the package registry user
+        type: string
+      verbose:
+        description: enables verbose output
+        type: boolean
+    type: object
+  types.Dictionary:
+    properties:
+      description:
+        description: Description describe the purpose / content of the dictionary
+        type: string
+      key:
+        description: Key a natural key used to uniquely identify this dictionary for
+          the purpose of idempotent opeartions
+        type: string
+      name:
+        description: Name a friendly name for the dictionary
+        type: string
+      tags:
+        description: Tags a list of string based tags used for categorising the dictionary
+        items:
+          type: string
+        type: array
+      values:
+        additionalProperties: true
+        description: Values a map containing key/value pairs that are the content
+          held by the dictionary
+        type: object
+    type: object
+  types.JobBatchInfo:
+    properties:
+      fx_key:
+        description: the unique key of the function to run
+        type: string
+      fx_version:
+        description: the version of the function to run
+        type: integer
+      host_uuid:
+        description: the universally unique host identifier created by pilot
+        items:
+          type: string
+        type: array
+      label:
+        description: one or more search labels
+        items:
+          type: string
+        type: array
+      name:
+        description: the name of the batch (not unique, a user-friendly name)
+        type: string
+      notes:
+        description: any relevant notes for the batch (not mandatory)
+        type: string
+    type: object
+  types.Registration:
+    properties:
+      area:
+        type: string
+      label:
+        items:
+          type: string
+        type: array
+      location:
+        type: string
+      mac_address:
+        type: string
+      org:
+        type: string
+      org_group:
+        type: string
+    type: object
+info:
+  contact:
+    email: admin@southwinds.io
+    url: http://www.southwinds.io/
+  description: Control Service for Pilot agents
+  license:
+    name: GNU Affero GPL 3.0
+    url: https://www.gnu.org/licenses/agpl-3.0-standalone.html
+  title: Pilot Control Service
+  version: 1.0.0
+paths:
+  /admission:
+    put:
+      description: |-
+        inform pilotctl to accept management connections coming from a host pilot agent
+        admitting a host also requires associating the relevant logistic information such as org, area and location for the host
+      parameters:
+      - description: the required admission information
+        in: body
+        name: command
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/types.Admission'
+          type: array
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Admits a host into service
+      tags:
+      - Admission
+  /area/{area}/location:
+    get:
+      description: Get a list of locations setup in an area
+      parameters:
+      - description: the unique id for area under which locations are defined
+        in: path
+        name: area
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Locations in an Area
+      tags:
+      - Logistics
+  /cmd:
+    get:
+      description: gets a list of all command definitions
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get all Command definitions
+      tags:
+      - Command
+    put:
+      description: creates a new or updates an existing command definition
+      parameters:
+      - description: the command definition
+        in: body
+        name: command
+        required: true
+        schema:
+          $ref: '#/definitions/types.Cmd'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Create or Update a Command
+      tags:
+      - Command
+  /cmd/{name}:
+    delete:
+      description: deletes a specific a command definition using the command name
+      parameters:
+      - description: the unique name for the command to delete
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Delete a Command definition
+      tags:
+      - Command
+    get:
+      description: get a specific a command definition
+      parameters:
+      - description: the unique name for the command to retrieve
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get a Command definition
+      tags:
+      - Command
+  /cve/baseline:
+    get:
+      description: Returns a list of packages that must be updated to fix CVEs across
+        hosts
+      parameters:
+      - description: the minimum CVSS score to include in the baseline
+        in: query
+        name: score
+        type: string
+      - description: a pipe | separated list of labels associated to the host(s) to
+          include in the baseline
+        in: query
+        name: label
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get CVE Baseline
+      tags:
+      - Report
+  /dictionary:
+    get:
+      description: Retrieve a list of available dictionaries
+      parameters:
+      - description: a flag indicating if all dictionary values should be returned
+          (true) or only key and description
+        in: query
+        name: values
+        type: boolean
+      produces:
+      - application/json
+      - ' application/yaml'
+      - ' application/xml'
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get a List of Dictionaries
+      tags:
+      - Dictionary
+    put:
+      description: Creates or Update a dictionary using its natural key
+      parameters:
+      - description: the dictionary to create or update
+        in: body
+        name: dictionary
+        required: true
+        schema:
+          $ref: '#/definitions/types.Dictionary'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Set a Dictionary
+      tags:
+      - Dictionary
+  /dictionary/{key}:
+    delete:
+      description: Delete a dictionary using its natural key
+      parameters:
+      - description: the unique key for the dictionary to delete
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Delete a Dictionary
+      tags:
+      - Dictionary
+    get:
+      description: Retrieve a dictionary using its natural key
+      parameters:
+      - description: the unique key for the dictionary to get
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      - ' application/yaml'
+      - ' application/xml'
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get a Dictionary
+      tags:
+      - Dictionary
+  /host:
+    get:
+      description: Returns a list of remote hosts
+      parameters:
+      - description: the organisation group key to filter the query
+        in: query
+        name: og
+        type: string
+      - description: the organisation key to filter the query
+        in: query
+        name: or
+        type: string
+      - description: the area key to filter the query
+        in: query
+        name: ar
+        type: string
+      - description: the location key to filter the query
+        in: query
+        name: lo
+        type: string
+      - description: a pipe | separated list of labels associated to the host(s) to
+          retrieve
+        in: query
+        name: label
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get All Hosts
+      tags:
+      - Host
+  /host/{host-uuid}:
+    delete:
+      description: removes the host from the list of available hosts so that it can
+        be no longer managed
+      parameters:
+      - description: the unique identifier for the host
+        in: path
+        name: host-uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Decommissions a host
+      tags:
+      - Host
+  /info/sync:
+    post:
+      consumes:
+      - application/vnd.ms-excel
+      description: |-
+        uploads a spreadsheet file with logistics information (i.e. org groups, orgs, areas and locations)
+        and synchronises the data with the backend
+      parameters:
+      - description: a flag indicating whether a dry-run (health check) should be
+          performed without committing data to the backend
+        in: query
+        name: dry-run
+        type: boolean
+      - description: the spreadsheet file containing logistics information to be synced
+        in: formData
+        name: info-file
+        required: true
+        type: file
+      produces:
+      - application/json
+      - ' application/yaml'
+      - ' application/xml'
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Syncs logistics information
+      tags:
+      - Logistics
+  /job:
+    get:
+      description: Returns a list of jobs filtered by the specified logistics tags
+      parameters:
+      - description: the unique identifier (number) of the job batch to retrieve
+        in: query
+        name: bid
+        type: integer
+      - description: the organisation group key to filter the query
+        in: query
+        name: og
+        type: string
+      - description: the organisation key to filter the query
+        in: query
+        name: or
+        type: string
+      - description: the area key to filter the query
+        in: query
+        name: ar
+        type: string
+      - description: the location key to filter the query
+        in: query
+        name: lo
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Jobs
+      tags:
+      - Job
+    post:
+      description: create a new job for execution on one or more remote hosts
+      parameters:
+      - description: the information required to create a new job
+        in: body
+        name: command
+        required: true
+        schema:
+          $ref: '#/definitions/types.JobBatchInfo'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Create a Job
+      tags:
+      - Job
+  /job/batch:
+    get:
+      description: Returns a list of jobs batches with various filters
+      parameters:
+      - description: the name of the batch as in name% format
+        in: query
+        name: name
+        type: string
+      - description: the creator of the batch
+        in: query
+        name: owner
+        type: string
+      - description: a pipe | separated list of labels associated to the batch
+        in: query
+        name: label
+        type: string
+      - description: the time from which to get batches (format should be dd-MM-yyyy)
+        in: query
+        name: from
+        type: string
+      - description: the time to which to get batches (format should be dd-MM-yyyy)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Job Batches
+      tags:
+      - Job
+  /org-group:
+    get:
+      description: Get a list of organisation groups
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Organisation Groups
+      tags:
+      - Logistics
+  /org-group/{org-group}/area:
+    get:
+      description: Get a list of areas setup in an organisation group
+      parameters:
+      - description: the unique id for organisation group under which areas are defined
+        in: path
+        name: org-group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Areas in Organisation Group
+      tags:
+      - Logistics
+  /org-group/{org-group}/org:
+    get:
+      description: Get a list of organisations setup in an organisation group
+      parameters:
+      - description: the unique id for organisation group under which organisations
+          are defined
+        in: path
+        name: org-group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Organisations in Organisation Group
+      tags:
+      - Logistics
+  /package:
+    get:
+      description: get a list of packages in the backing Artisan registry
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get Artisan Packages
+      tags:
+      - Registry
+  /package/{name}/api:
+    get:
+      description: get a list of exported functions and inputs for the specified package
+      parameters:
+      - description: the fully qualified name of the artisan package having the required
+          API
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get the API of an Artisan Package
+      tags:
+      - Registry
+  /pub:
+    get:
+      description: Retrieve the service public PGP key used to verify the authenticity
+        of the service by pilot agents
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Retrieve the service public PGP key
+      tags:
+      - PGP
+  /registration:
+    post:
+      description: requests the activation service to reserve an activation for a
+        host of the specified mac-address
+      parameters:
+      - description: the required registration information
+        in: body
+        name: command
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/types.Registration'
+          type: array
+      produces:
+      - text/plain
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Registers a Host so that it can be activated
+      tags:
+      - Activation
+  /registration/{mac-address}:
+    delete:
+      description: undoes a host registration providing the host has not yet activated
+        / admitted
+      parameters:
+      - description: the mac address of the host to be un-registered
+        in: path
+        name: mac-address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Undo a Host Registration
+      tags:
+      - Activation
+  /user:
+    get:
+      description: |-
+        Retrieve the logged user principal containing a list of access controls granted to the user
+        use it primarily to log in user interface services and retrieve a list of access controls to inform which
+        operations are available to the user via the user interface
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Retrieve the logged user principal
+      tags:
+      - Access Control
+swagger: "2.0"
